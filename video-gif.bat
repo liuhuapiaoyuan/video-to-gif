@@ -8,38 +8,40 @@ echo     Video to GIF 转换工具
 echo =================================
 echo.
 
-REM 检查是否提供了参数（拖拽的文件夹）
+REM 检查是否提供了参数（拖拽的文件夹或文件）
 if "%~1"=="" (
     echo 使用方法：
     echo 1. 将包含MP4文件的文件夹拖拽到此批处理文件上
-    echo 2. 或者在命令行中使用: video-gif.bat "文件夹路径"
+    echo 2. 将单个MP4文件拖拽到此批处理文件上
+    echo 3. 或者在命令行中使用: video-gif.bat "路径"
     echo.
-    echo 示例：video-gif.bat "C:\My Videos"
-    echo.
-    pause
-    exit /b 1
-)
-
-REM 获取拖拽的文件夹路径
-set "input_folder=%~1"
-
-REM 检查文件夹是否存在
-if not exist "%input_folder%" (
-    echo ❌ 错误：文件夹不存在 "%input_folder%"
+    echo 示例：
+    echo   video-gif.bat "C:\My Videos"
+    echo   video-gif.bat "C:\My Videos\video.mp4"
     echo.
     pause
     exit /b 1
 )
 
-REM 检查是否为文件夹
-if not exist "%input_folder%\*" (
-    echo ❌ 错误：指定的路径不是文件夹 "%input_folder%"
+REM 获取拖拽的路径（文件夹或文件）
+set "input_path=%~1"
+
+REM 检查路径是否存在
+if not exist "%input_path%" (
+    echo ❌ 错误：路径不存在 "%input_path%"
     echo.
     pause
     exit /b 1
 )
 
-echo 📁 输入文件夹: %input_folder%
+REM 检查是文件夹还是文件
+if exist "%input_path%\*" (
+    echo 📁 输入文件夹: %input_path%
+    set "input_type=folder"
+) else (
+    echo 📄 输入文件: %input_path%
+    set "input_type=file"
+)
 echo.
 
 REM 获取批处理文件所在目录
@@ -63,13 +65,18 @@ echo 🚀 开始转换...
 echo.
 
 REM 运行转换程序
-"%exe_path%" "%input_folder%"
+"%exe_path%" "%input_path%"
 
 REM 检查转换结果
 if %errorlevel% == 0 (
     echo.
     echo ✅ 转换完成！
-    echo 📂 GIF文件已保存到: %input_folder%
+    if "%input_type%"=="folder" (
+        echo 📂 GIF文件已保存到: %input_path%
+    ) else (
+        for %%F in ("%input_path%") do set "output_dir=%%~dpF"
+        echo 📂 GIF文件已保存到: !output_dir!
+    )
 ) else (
     echo.
     echo ❌ 转换过程中发生错误

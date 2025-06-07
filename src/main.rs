@@ -9,16 +9,16 @@ mod converter;
 mod utils;
 
 use converter::VideoConverter;
-use utils::*;
+use utils::{is_mp4_file};
 
 #[derive(Parser)]
 #[command(name = "video-gif")]
-#[command(about = "将文件夹中的MP4视频文件转换为GIF动图")]
-#[command(version = "1.1.0")]
+#[command(about = "将文件夹中的MP4视频文件转换为GIF动图，或转换单个MP4文件")]
+#[command(version = "1.2.0")]
 struct Args {
-    /// 包含MP4文件的文件夹路径
-    #[arg(help = "包含MP4文件的文件夹路径")]
-    folder: PathBuf,
+    /// 包含MP4文件的文件夹路径，或单个MP4文件路径
+    #[arg(help = "包含MP4文件的文件夹路径，或单个MP4文件路径")]
+    input: PathBuf,
     
     /// 输出GIF的帧率 (默认: 10)
     #[arg(short = 'r', long = "fps", default_value = "10")]
@@ -61,20 +61,29 @@ fn main() -> Result<()> {
     // 检查FFmpeg是否可用
     check_ffmpeg_availability(&ffmpeg_path)?;
     
-    // 验证输入文件夹
-    if !args.folder.exists() {
-        anyhow::bail!("指定的文件夹不存在: {}", args.folder.display());
+    // 验证输入路径
+    if !args.input.exists() {
+        anyhow::bail!("指定的路径不存在: {}", args.input.display());
     }
     
-    if !args.folder.is_dir() {
-        anyhow::bail!("指定的路径不是文件夹: {}", args.folder.display());
-    }
-    
-    // 查找所有MP4文件
-    let mp4_files = find_mp4_files(&args.folder)?;
+    // 根据输入类型处理MP4文件
+    let mp4_files = if args.input.is_file() {
+        // 处理单个文件
+        if !is_mp4_file(&args.input) {
+            anyhow::bail!("指定的文件不是MP4格式: {}", args.input.display());
+        }
+        vec![args.input.clone()]
+    } else if args.input.is_dir() {
+        // 处理文件夹
+        find_mp4_files(&args.input)?
+    } else {
+        anyhow::bail!("指定的路径既不是文件也不是文件夹: {}", args.input.display());
+    };
     
     if mp4_files.is_empty() {
-        println!("在文件夹 {} 中未找到MP4文件", args.folder.display());
+        if args.input.is_dir() {
+            println!("在文件夹 {} 中未找到MP4文件", args.input.display());
+        }
         return Ok(());
     }
     
@@ -138,7 +147,15 @@ fn main() -> Result<()> {
     if error_count > 0 {
         println!("❌ 失败: {} 个文件", error_count);
     }
-    println!("📁 输出目录: {}", args.folder.display());
+    
+    // 显示输出位置信息
+    if args.input.is_file() {
+        if let Some(parent) = args.input.parent() {
+            println!("📁 输出目录: {}", parent.display());
+        }
+    } else {
+        println!("📁 输出目录: {}", args.input.display());
+    }
     
     Ok(())
 }
@@ -176,4 +193,40 @@ fn find_mp4_files(folder: &PathBuf) -> Result<Vec<PathBuf>> {
     
     mp4_files.sort();
     Ok(mp4_files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    
+    #[test]
+    fn test_find_mp4_files() {
+        // 创建临时目录结构进行测试
+        let temp_dir = std::env::temp_dir().join("video_gif_test");
+        let _ = fs::remove_dir_all(&temp_dir); // 清理可能存在的目录
+        fs::create_dir_all(&temp_dir).unwrap();
+        
+        // 创建测试文件
+        let mp4_file = temp_dir.join("test.mp4");
+        let txt_file = temp_dir.join("test.txt");
+        
+        fs::File::create(&mp4_file).unwrap();
+        fs::File::create(&txt_file).unwrap();
+        
+        // 测试文件夹扫描
+        let result = find_mp4_files(&temp_dir).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], mp4_file);
+        
+        // 清理
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+    
+    #[test]
+    fn test_get_ffmpeg_path() {
+        let path = get_ffmpeg_path();
+        // 应该返回一个有效的路径字符串
+        assert!(!path.is_empty());
+    }
 } 
