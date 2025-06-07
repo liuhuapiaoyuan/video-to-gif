@@ -14,7 +14,7 @@ use utils::{is_mp4_file};
 #[derive(Parser)]
 #[command(name = "video-gif")]
 #[command(about = "将文件夹中的MP4视频文件转换为GIF动图，或转换单个MP4文件")]
-#[command(version = "1.2.0")]
+#[command(version = "1.2.2")]
 struct Args {
     /// 包含MP4文件的文件夹路径，或单个MP4文件路径
     #[arg(help = "包含MP4文件的文件夹路径，或单个MP4文件路径")]

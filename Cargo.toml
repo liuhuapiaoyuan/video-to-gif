@@ -1,8 +1,8 @@
 [package]
 name = "video-gif"
-version = "1.2.0"
+version = "1.2.2"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["liuhuapiaoyuan <g278780765@gmail.com>"]
 description = "一个简单易用的命令行工具，用于将文件夹中的所有MP4视频文件转换为GIF动图。内置FFmpeg，无需单独安装。"
 repository = "https://github.com/your-username/video-gif"
 license = "MIT"

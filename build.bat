@@ -15,6 +15,9 @@ echo 📁 清理之前的构建文件...
 if exist target\release\video-gif.exe del target\release\video-gif.exe
 if exist releases rmdir /s /q releases
 
+REM 清理根目录下的可执行文件（如果存在）
+if exist video-gif.exe del video-gif.exe
+
 REM 创建发布目录
 echo 📁 创建发布目录...
 mkdir releases 2>nul
