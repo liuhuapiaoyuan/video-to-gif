@@ -1,0 +1,29 @@
+# Rust编译产物
+/target/
+Cargo.lock
+
+# IDE和编辑器文件
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 操作系统文件
+.DS_Store
+Thumbs.db
+
+# 测试文件
+*.mp4
+*.gif
+test_videos/
+
+# 日志文件
+*.log
+
+# 临时文件
+*.tmp
+*.temp
+
+# 发布文件
+/releases/ 
