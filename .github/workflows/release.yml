@@ -1,0 +1,245 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.2.3)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build for ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            executable_suffix: .exe
+            archive_suffix: .zip
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            executable_suffix: ''
+            archive_suffix: .tar.gz
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            executable_suffix: ''
+            archive_suffix: .tar.gz
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/bin/
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+          target/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Build release binary
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Check FFmpeg (Windows)
+      if: matrix.target == 'x86_64-pc-windows-msvc'
+      shell: bash
+      run: |
+        if [[ ! -f "ffmpeg.exe" ]]; then
+          echo "⚠️ ffmpeg.exe not found, downloading..."
+          curl -L -o ffmpeg.zip "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+          7z x ffmpeg.zip
+          cp ffmpeg-master-latest-win64-gpl/bin/ffmpeg.exe .
+          rm -rf ffmpeg-master-latest-win64-gpl ffmpeg.zip
+        else
+          echo "✅ ffmpeg.exe found"
+        fi
+
+    - name: Prepare release directory
+      shell: bash
+      run: |
+        mkdir -p release
+        cp target/${{ matrix.target }}/release/video-gif${{ matrix.executable_suffix }} release/
+        cp README.MD release/
+        cp LICENSE release/
+        
+        # Copy platform-specific files
+        if [[ "${{ matrix.target }}" == "x86_64-pc-windows-msvc" ]]; then
+          cp video-gif.bat release/
+          cp ffmpeg.exe release/
+        elif [[ "${{ matrix.target }}" == "x86_64-apple-darwin" ]]; then
+          # For macOS, create a script that assumes ffmpeg is in PATH
+          cat > release/install-ffmpeg.sh << 'EOF'
+        #!/bin/bash
+        echo "正在检查FFmpeg..."
+        if ! command -v ffmpeg &> /dev/null; then
+            echo "请安装FFmpeg: brew install ffmpeg"
+            exit 1
+        fi
+        echo "FFmpeg已安装，可以使用video-gif工具"
+        EOF
+          chmod +x release/install-ffmpeg.sh
+        elif [[ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ]]; then
+          # For Linux, create a script that assumes ffmpeg is in PATH  
+          cat > release/install-ffmpeg.sh << 'EOF'
+        #!/bin/bash
+        echo "正在检查FFmpeg..."
+        if ! command -v ffmpeg &> /dev/null; then
+            echo "请安装FFmpeg:"
+            echo "Ubuntu/Debian: sudo apt-get install ffmpeg"
+            echo "CentOS/RHEL: sudo yum install ffmpeg"
+            echo "Arch Linux: sudo pacman -S ffmpeg"
+            exit 1
+        fi
+        echo "FFmpeg已安装，可以使用video-gif工具"
+        EOF
+          chmod +x release/install-ffmpeg.sh
+        fi
+
+    - name: Create archive (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: bash
+      run: |
+        cd release
+        7z a ../video-gif-${{ matrix.target }}${{ matrix.archive_suffix }} *
+
+    - name: Create archive (Unix)
+      if: matrix.os != 'windows-latest'
+      shell: bash
+      run: |
+        cd release
+        tar -czf ../video-gif-${{ matrix.target }}${{ matrix.archive_suffix }} *
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: video-gif-${{ matrix.target }}
+        path: video-gif-${{ matrix.target }}${{ matrix.archive_suffix }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: artifacts
+
+    - name: Generate release tag
+      id: tag
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Extract version from Cargo.toml
+      id: version
+      run: |
+        VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Generate changelog
+      id: changelog
+      run: |
+        # Extract changelog for current version from README.MD
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Create changelog from README
+        cat > CHANGELOG.md << 'EOF'
+        # Video to GIF 转换工具 - Release ${{ steps.tag.outputs.tag }}
+        
+        ## 🎉 新版本发布：v${{ steps.version.outputs.version }}
+        
+        ### 📥 下载说明
+        
+        请根据您的操作系统下载对应的文件：
+        
+        - **Windows 用户**: `video-gif-x86_64-pc-windows-msvc.zip`
+        - **macOS 用户**: `video-gif-x86_64-apple-darwin.tar.gz`  
+        - **Linux 用户**: `video-gif-x86_64-unknown-linux-gnu.tar.gz`
+        
+        ### 🚀 使用方法
+        
+        1. 下载对应平台的压缩包
+        2. 解压到任意目录
+        3. Windows用户：将文件或文件夹拖拽到 `video-gif.bat` 上
+        4. macOS/Linux用户：在终端中运行 `./video-gif <文件或文件夹路径>`
+        
+        ### ✨ 主要功能
+        
+        - 🎬 支持单个MP4文件转换
+        - 📁 支持批量文件夹处理
+        - 🖱️ Windows拖拽支持
+        - ⚡ 内置FFmpeg，无需额外安装
+        - 🌍 完全支持中文路径和特殊字符
+        
+        ### 🔧 技术特性
+        
+        - 基于Rust开发，性能优异
+        - 跨平台支持（Windows/macOS/Linux）
+        - 智能错误处理
+        - 进度条显示
+        - 可自定义输出参数
+        EOF
+        
+        # Extract current version changes from README if available
+        if grep -q "### v${{ steps.version.outputs.version }}" README.MD; then
+          echo "" >> CHANGELOG.md
+          echo "### 📋 本版本更新内容" >> CHANGELOG.md
+          echo "" >> CHANGELOG.md
+          sed -n "/### v${{ steps.version.outputs.version }}/,/### v/p" README.MD | head -n -1 | tail -n +2 >> CHANGELOG.md
+        fi
+        
+        echo "" >> CHANGELOG.md
+        echo "---" >> CHANGELOG.md
+        echo "" >> CHANGELOG.md
+        echo "**完整更新日志**: [查看README.MD](https://github.com/${{ github.repository }}/blob/main/README.MD#更新日志)" >> CHANGELOG.md
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.tag.outputs.tag }}
+        name: "Release ${{ steps.tag.outputs.tag }}"
+        body_path: CHANGELOG.md
+        draft: false
+        prerelease: false
+        files: |
+          artifacts/video-gif-x86_64-pc-windows-msvc/video-gif-x86_64-pc-windows-msvc.zip
+          artifacts/video-gif-x86_64-apple-darwin/video-gif-x86_64-apple-darwin.tar.gz
+          artifacts/video-gif-x86_64-unknown-linux-gnu/video-gif-x86_64-unknown-linux-gnu.tar.gz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Update latest release info
+      run: |
+        echo "✅ Release ${{ steps.tag.outputs.tag }} created successfully!"
+        echo "📦 Artifacts uploaded:"
+        echo "  - Windows: video-gif-x86_64-pc-windows-msvc.zip"
+        echo "  - macOS: video-gif-x86_64-apple-darwin.tar.gz" 
+        echo "  - Linux: video-gif-x86_64-unknown-linux-gnu.tar.gz" 

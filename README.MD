@@ -107,6 +107,13 @@ video-gif/
 │   └── utils.rs             # 工具函数
 ├── docs/
 │   └── demo1.png            # 演示截图
+├── scripts/
+│   ├── release.sh           # 发布脚本(Linux/macOS)
+│   └── release.ps1          # 发布脚本(Windows)
+├── .github/
+│   └── workflows/
+│       ├── ci.yml           # CI工作流
+│       └── release.yml      # 发布工作流
 ├── releases/                # 发布目录（自动生成）
 │   ├── video-gif.exe        # 主程序
 │   ├── ffmpeg.exe           # 内置FFmpeg
@@ -177,11 +184,40 @@ build-and-release.bat
 - `build-and-release.bat` - 完整的构建和发布流程
 - `update-release.bat` - 手动更新发布文件
 
+**自动发布流程：**
+- `scripts/release.sh` (Linux/macOS) - 创建版本标签并触发自动发布
+- `scripts/release.ps1` (Windows) - PowerShell版本的发布脚本
+- GitHub Actions 自动构建跨平台版本并创建Release
+
 ### 文件组织
 
 - **开发文件**: 源码保存在 `src/` 目录
 - **发布文件**: 自动生成到 `releases/` 目录
 - **根目录**: 不保存可执行文件，避免版本混乱
+
+### 发布新版本
+
+1. **更新版本号**：
+   ```bash
+   # 更新 Cargo.toml 中的版本号
+   # 更新 src/main.rs 中的版本号
+   # 在 README.MD 中添加更新日志
+   ```
+
+2. **自动发布**：
+   ```bash
+   # Linux/macOS
+   ./scripts/release.sh
+   
+   # Windows PowerShell
+   .\scripts\release.ps1
+   ```
+
+3. **GitHub Actions 将自动**：
+   - 构建 Windows/macOS/Linux 版本
+   - 创建 GitHub Release
+   - 生成 Release Notes
+   - 上传跨平台构建文件
 
 ## 贡献指南
 
